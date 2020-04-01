@@ -19,6 +19,7 @@ package com.android.keyguard;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.ACTION_USER_UNLOCKED;
+import static android.os.BatteryManager.EXTRA_VOOC_CHARGER;
 import static android.os.BatteryManager.BATTERY_HEALTH_UNKNOWN;
 import static android.os.BatteryManager.BATTERY_STATUS_FULL;
 import static android.os.BatteryManager.BATTERY_STATUS_UNKNOWN;
@@ -1099,10 +1100,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     maxChargingMicroWatt = -1;
                 }
                 final boolean dashChargeStatus = intent.getBooleanExtra(EXTRA_DASH_CHARGER, false);
+                final boolean voocChargeStatus = intent.getBooleanExtra(EXTRA_VOOC_CHARGER, false);
                 final Message msg = mHandler.obtainMessage(
                         MSG_BATTERY_UPDATE, new BatteryStatus(status, level, plugged, health,
                                 maxChargingMicroAmp, maxChargingMicroVolt, maxChargingMicroWatt,
-                                temperature, dashChargeStatus));
+                                temprature, dashChargeStatus, voocChargeStatus));
                 mHandler.sendMessage(msg);
             } else if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(action)) {
                 SimData args = SimData.fromIntent(intent);
@@ -1341,6 +1343,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         public static final int CHARGING_REGULAR = 1;
         public static final int CHARGING_FAST = 2;
         public static final int CHARGING_DASH = 3;
+        public static final int CHARGING_VOOC = 4;
 
         public final int status;
         public final int level;
@@ -1351,9 +1354,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         public final int maxChargingWattage;
         public final int temperature;
         public final boolean dashChargeStatus;
+        public final boolean voocChargeStatus;
         public BatteryStatus(int status, int level, int plugged, int health,
                 int maxChargingCurrent, int maxChargingVoltage, int maxChargingWattage,
-                int temperature, boolean dashChargeStatus) {
+                int temperature, boolean dashChargeStatus,
+                boolean voocChargeStatus) {
             this.status = status;
             this.level = level;
             this.plugged = plugged;
@@ -1363,6 +1368,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             this.maxChargingWattage = maxChargingWattage;
             this.temperature = temperature;
             this.dashChargeStatus = dashChargeStatus;
+            this.voocChargeStatus = voocChargeStatus;
         }
 
         /**
@@ -1403,7 +1409,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
 
         public final int getChargingSpeed(int slowThreshold, int fastThreshold) {
-            return dashChargeStatus ? CHARGING_DASH :
+             return dashChargeStatus ? CHARGING_DASH :
+                    voocChargeStatus ? CHARGING_VOOC :
                     maxChargingWattage <= 0 ? CHARGING_UNKNOWN :
                     maxChargingWattage < slowThreshold ? CHARGING_SLOWLY :
                     maxChargingWattage > fastThreshold ? CHARGING_FAST :
@@ -1556,7 +1563,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
 
         // Take a guess at initial SIM state, battery status and PLMN until we get an update
-        mBatteryStatus = new BatteryStatus(BATTERY_STATUS_UNKNOWN, 100, 0, 0, 0, 0 ,0, 0, false);
+        mBatteryStatus = new BatteryStatus(BATTERY_STATUS_UNKNOWN, 100, 0, 0, 0, 0 ,0, 0, false, false);
 
         // Watch for interesting updates
         final IntentFilter filter = new IntentFilter();
@@ -2327,6 +2334,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
         // change in dash charging while plugged in
         if (nowPluggedIn && current.dashChargeStatus != old.dashChargeStatus) {
+            return true;
+        }
+
+        // change in VOOC charging while plugged in
+        if (nowPluggedIn && current.voocChargeStatus != old.voocChargeStatus) {
             return true;
         }
 
